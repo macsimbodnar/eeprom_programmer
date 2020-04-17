@@ -38,9 +38,11 @@ const byte ASCIIHexList['F' - '0' + 1] = {
 #define WRITE_ENABLE  13  // WE
 
 // HEX 0 1 2 3 4 5 6 7 8 9 A B C D E F
-#define C_START       '<'
-#define C_END         '>'
-#define C_DUMP        '#'
+#define C_START     '<'
+#define C_END       '>'
+#define C_DUMP      '#'
+#define C_ENTRY     '!'
+#define C_CLEAR     '_'
 
 //                             MSB...................LSB
 const static int data_pins[] = {12, 9, 8, 7, 6, 3, 4, 5};
@@ -124,6 +126,21 @@ void loop() {
             return;
 
         case C_DUMP:
+            Serial.println("---------------------------------------------------------");
+            read_page(0);
+            Serial.println("---------------------------------------------------------");
+            return;
+
+        case C_ENTRY:
+            write_EEPROM(0x7FFC, 0x00);
+            write_EEPROM(0x7FFD, 0x80);
+            Serial.println("---------------------------------------------------------");
+            read_page(127);
+            Serial.println("---------------------------------------------------------");
+            return;
+
+        case C_CLEAR:
+            write_all(0xEA);
             Serial.println("---------------------------------------------------------");
             read_page(0);
             Serial.println("---------------------------------------------------------");
@@ -300,6 +317,15 @@ static void write_page(const int page, const byte data) {
 
     for (int i = offset; i < 256 + offset; i++) {
         write_EEPROM(i, data);
+    }
+}
+
+
+static void write_all(const byte data) {
+    for (int i = 0; i < 128; i++) {
+        Serial.print("Writing page ");
+        Serial.println(i);
+        write_page(i, data);
     }
 }
 
