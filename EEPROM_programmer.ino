@@ -38,15 +38,17 @@ const byte ASCIIHexList['F' - '0' + 1] = {
 #define WRITE_ENABLE  13  // WE
 
 // HEX 0 1 2 3 4 5 6 7 8 9 A B C D E F
-#define C_START     '<'
-#define C_END       '>'
-#define C_DUMP      '#'
+#define C_START     '<'     // Start writing from address 0
+#define C_END       '>'     // End writing
+#define C_DUMP      '#'     // Dump first page
+#define C_PRINT     'P'     // Print the page at address: P FFFF
 #define C_ENTRY     '!'
-#define C_CLEAR     '_'
+#define C_CLEAR     '_'     // Set all memory to the value 0
 
 //                             MSB...................LSB
 const static int data_pins[] = {12, 9, 8, 7, 6, 3, 4, 5};
 #define DATA_LEN      (sizeof(data_pins) / sizeof(data_pins[0]))
+
 
 typedef enum {
     MODE_WRITE,
@@ -54,16 +56,24 @@ typedef enum {
     MODE_NONE
 } rw_mode_t;
 
+
 typedef enum {
     S_WAIT,
-    S_READ,
+    S_WRITE_IN_MEM,
+    S_PRINT_PAGE
 } state_t;
 
-static state_t state = S_WAIT;
-static rw_mode_t current_mode = MODE_NONE;
-static char HEX_buf[2];
-static byte HEX_count = 0;
-static int write_counter = 0;
+
+static state_t state = S_WAIT;              // Current state
+static rw_mode_t current_mode = MODE_NONE;  // Current operation mode
+static char HEX_buf[4];                     // Buffer for reading the hex from serial
+static byte HEX_count = 0;                  // Counter of read HEX characters
+static int write_counter = 0;               // Counter of bytes written in EEPROM
+static int b = 0;                           // Last data read from serial
+static byte last_byte = 0;                  // Last byte HEX formatted byte read from serial
+static int ser_addres_count = 0;            // Counter used to read the a 4 HEX digit value
+static int last_address = 0;                // Address read from serial
+
 
 void setup() {
     // INIT SERIAL
@@ -89,17 +99,18 @@ void setup() {
     Serial.println("-------------------");
 }
 
+
 void loop() {
-    // send data only when you receive data:
+    // Read data from serial
     if (Serial.available() > 0) {
-        // read the incoming byte:
-        int b = Serial.read();
+        // Read the incoming byte:
+        b = Serial.read();
 
         // Search for command
         switch (b) {
 
         case C_START:
-            state = S_READ;
+            state = S_WRITE_IN_MEM;
             HEX_count = 0;
             write_counter = 0;
             Serial.println("Waiting...");
@@ -113,7 +124,7 @@ void loop() {
             char buf[10];
             Serial.print("< ");
 
-            for (int i = 0; i < write_counter; i++) {
+            for (int i = 0; i < write_counter; ++i) {
                 sprintf(buf, "%02X ", read_EEPROM(i));
                 Serial.print(buf);
             }
@@ -146,44 +157,41 @@ void loop() {
             Serial.println("---------------------------------------------------------");
             return;
 
+        case C_PRINT:
+            state = S_PRINT_PAGE;
+            ser_addres_count = 0;
+            last_address = 0;
+            return;
+
         case '\n':
             return;
         }
 
+
+        // Execute the current state
         switch (state) {
-        case S_WAIT:
+        case S_WAIT:                // Waiting for the next command
             break;
 
-        case S_READ:
+        case S_WRITE_IN_MEM:        // Write bytes on the serial into EEPROM
 
-            if ((b > '/' && b < ':') || (b > '@' && b < 'G')) {
-                switch (HEX_count) {
-                case 0:
-                    HEX_buf[0] = b;
-                    HEX_count++;
-                    break;
+            if (read_HEX()) {
+                write_EEPROM(write_counter, last_byte);
+                ++write_counter;
 
-                case 1: {
-                    HEX_buf[1] = b;
+                //char buf[50];
+                //sprintf(buf, "Get:  0x%02X  %d", last_byte, last_byte);
+                //Serial.println(buf);
+            }
 
-                    byte val = hex_to_byte(HEX_buf);
-                    HEX_count = 0;
+            break;
 
-                    write_EEPROM(write_counter, val);
-                    write_counter++;
-
-                    //char buf[50];
-                    //sprintf(buf, "Get:  0x%02X  %d", val, val);
-                    //Serial.println(buf);
-                }
-                break;
-                }
-
-            } else {
-                HEX_count = 0;
-
-                Serial.print("Ignoring: ");
-                Serial.println(b, DEC);
+        case S_PRINT_PAGE:          // Print on serial a specified page 4 hex digits: FFFF
+            if (read_address()) {
+                Serial.println("---------------------------------------------------------");
+                read_page(last_address);
+                Serial.println("---------------------------------------------------------");
+                state = S_WAIT;
             }
 
             break;
@@ -193,6 +201,60 @@ void loop() {
             break;
         }
     }
+}
+
+
+/**
+ *  Parse the characters from serial into byte.
+ *  Return true if found a valid 2 digit HEX number in serial, false otherwaise
+ *  The result is stored in last_byte
+ */
+static bool read_HEX() {
+    if ((b > '/' && b < ':') || (b > '@' && b < 'G')) {
+        switch (HEX_count) {
+        case 0:
+            HEX_buf[0] = b;
+            ++HEX_count;
+            break;
+
+        case 1:
+            HEX_buf[1] = b;
+
+            last_byte = hex_to_byte(HEX_buf);
+            HEX_count = 0;
+            return true;
+        }
+    } else {
+        HEX_count = 0;
+
+        Serial.print("Ignoring: ");
+        Serial.println(b, DEC);
+    }
+
+    return false;
+}
+
+
+static bool read_address() {
+    if (read_HEX()) {
+        switch (ser_addres_count) {
+        case 0:
+            last_address = (last_byte << 8) & 0x0000FF00;
+            ++ser_addres_count;
+            break;
+
+        case 1:
+            last_address |= last_byte;
+            ser_addres_count = 0;
+            return true;
+
+        default:
+            Serial.println("Error read address out of bound");
+            break;
+        }
+    }
+
+    return false;
 }
 
 
@@ -211,7 +273,7 @@ static void set_mode(const rw_mode_t mode) {
         return;
     }
 
-    for (int i = 0; i < DATA_LEN; i++) {
+    for (int i = 0; i < DATA_LEN; ++i) {
         int pin = data_pins[i];
         digitalWrite(pin, LOW);
 
@@ -233,7 +295,7 @@ static byte read_EEPROM(const int address) {
 
     set_address(address, true);
 
-    for (int i = 0; i < DATA_LEN; i++) {
+    for (int i = 0; i < DATA_LEN; ++i) {
         res = (res << 1) + digitalRead(data_pins[i]);
     }
 
@@ -247,7 +309,7 @@ static const void write_EEPROM(const int address, byte data) {
 
     set_address(address, false);
 
-    for (int i = DATA_LEN - 1; i >= 0; i--) {
+    for (int i = DATA_LEN - 1; i >= 0; --i) {
         digitalWrite(data_pins[i], data & 1);
         data = data >> 1;
     }
@@ -287,7 +349,7 @@ static void read_page(const int page) {
     for (int i = 0; i < 256; i += 16) {
         byte data_buf[16];
 
-        for (int j = 0; j < 16; j++) {
+        for (int j = 0; j < 16; ++j) {
             data_buf[j] = read_EEPROM(i + j + offset);
         }
 
@@ -305,7 +367,7 @@ static void read_page(const int page) {
 
 
 static void read_all() {
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < 128; ++i) {
         read_page(i);
         Serial.println();
     }
@@ -315,14 +377,14 @@ static void read_all() {
 static void write_page(const int page, const byte data) {
     int offset = page * 256;
 
-    for (int i = offset; i < 256 + offset; i++) {
+    for (int i = offset; i < 256 + offset; ++i) {
         write_EEPROM(i, data);
     }
 }
 
 
 static void write_all(const byte data) {
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < 128; ++i) {
         Serial.print("Writing page ");
         Serial.println(i);
         write_page(i, data);
@@ -332,4 +394,10 @@ static void write_all(const byte data) {
 
 byte hex_to_byte(const char bytes[2]) {
     return ((ASCII2NIBBLE((bytes[0])) << 4) | ASCII2NIBBLE((bytes[1])));
+}
+
+
+int hex_to_int16(const char bytes[4]) {
+    return ((ASCII2NIBBLE((bytes[0])) << 12) | (ASCII2NIBBLE((bytes[1])) << 8) | (ASCII2NIBBLE((
+                bytes[2])) << 4) | ASCII2NIBBLE((bytes[3])));
 }
