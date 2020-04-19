@@ -81,8 +81,8 @@ void setup() {
 
     while (!Serial) ;
 
-    Serial.println("-------------------");
-    Serial.println("Initializing...");
+    // Serial.println("-------------------");
+    // Serial.println("Initializing...");
 
     // put your setup code here, to run once:
     pinMode(SHIFT_DATA, OUTPUT);
@@ -91,12 +91,12 @@ void setup() {
     digitalWrite(WRITE_ENABLE, HIGH);
     pinMode(WRITE_ENABLE, OUTPUT);
 
-    Serial.println("-------------------");
-    Serial.print("Start sending:    ");
-    Serial.println(C_START);
-    Serial.print("End sending:      ");
-    Serial.println(C_END);
-    Serial.println("-------------------");
+    // Serial.println("-------------------");
+    // Serial.print("Start sending:    ");
+    // Serial.println(C_START);
+    // Serial.print("End sending:      ");
+    // Serial.println(C_END);
+    // Serial.println("-------------------");
 }
 
 
@@ -113,7 +113,7 @@ void loop() {
             state = S_WRITE_IN_MEM;
             HEX_count = 0;
             write_counter = 0;
-            Serial.println("Waiting...");
+            // Serial.println("Waiting...");
             return;
 
         case C_END:
@@ -121,19 +121,19 @@ void loop() {
             HEX_count = 0;
 
             // Print the read data
-            char buf[10];
-            Serial.print("< ");
+            // char buf[10];
+            // Serial.print("< ");
 
-            for (int i = 0; i < write_counter; ++i) {
-                sprintf(buf, "%02X ", read_EEPROM(i));
-                Serial.print(buf);
-            }
+            // for (int i = 0; i < write_counter; ++i) {
+            //     sprintf(buf, "%02X ", read_EEPROM(i));
+            //     Serial.print(buf);
+            // }
 
-            Serial.println(">");
+            // Serial.println(">");
 
-            Serial.println("---------------------------------------------------------");
-            read_page(0);
-            Serial.println("---------------------------------------------------------");
+            // Serial.println("---------------------------------------------------------");
+            // read_page(0);
+            // Serial.println("---------------------------------------------------------");
             return;
 
         case C_DUMP:
@@ -151,10 +151,10 @@ void loop() {
             return;
 
         case C_CLEAR:
-            write_all(0xEA);
-            Serial.println("---------------------------------------------------------");
-            read_page(0);
-            Serial.println("---------------------------------------------------------");
+            // write_all(0xEA);
+            // Serial.println("---------------------------------------------------------");
+            // read_page(0);
+            // Serial.println("---------------------------------------------------------");
             return;
 
         case C_PRINT:
