@@ -38,12 +38,11 @@ const byte ASCIIHexList['F' - '0' + 1] = {
 #define WRITE_ENABLE  13  // WE
 
 // HEX 0 1 2 3 4 5 6 7 8 9 A B C D E F
+#define C_HELP      'H'     // Print on serial all commands with the description
 #define C_START     '<'     // Start writing from address 0
 #define C_END       '>'     // End writing
-#define C_DUMP      '#'     // Dump first page
 #define C_PRINT     'P'     // Print the page at address: P FFFF
-#define C_ENTRY     '!'
-#define C_CLEAR     '_'     // Set all memory to the value 0
+#define C_CLEAR     'R'     // Erase all memory to 0x00
 
 //                             MSB...................LSB
 const static int data_pins[] = {12, 9, 8, 7, 6, 3, 4, 5};
@@ -81,22 +80,12 @@ void setup() {
 
     while (!Serial) ;
 
-    // Serial.println("-------------------");
-    // Serial.println("Initializing...");
-
-    // put your setup code here, to run once:
+    // Put your setup code here, to run once:
     pinMode(SHIFT_DATA, OUTPUT);
     pinMode(SHIFT_CLK, OUTPUT);
     pinMode(SHIFT_LATCH, OUTPUT);
     digitalWrite(WRITE_ENABLE, HIGH);
     pinMode(WRITE_ENABLE, OUTPUT);
-
-    // Serial.println("-------------------");
-    // Serial.print("Start sending:    ");
-    // Serial.println(C_START);
-    // Serial.print("End sending:      ");
-    // Serial.println(C_END);
-    // Serial.println("-------------------");
 }
 
 
@@ -109,14 +98,13 @@ void loop() {
         // Search for command
         switch (b) {
 
-        case C_START:
+        case C_START:   // Initialize the writing on memory status
             state = S_WRITE_IN_MEM;
             HEX_count = 0;
             write_counter = 0;
-            // Serial.println("Waiting...");
             return;
 
-        case C_END:
+        case C_END:     // Finish the writing in memory status
             state = S_WAIT;
             HEX_count = 0;
 
@@ -128,40 +116,29 @@ void loop() {
             //     sprintf(buf, "%02X ", read_EEPROM(i));
             //     Serial.print(buf);
             // }
-
-            // Serial.println(">");
-
-            // Serial.println("---------------------------------------------------------");
-            // read_page(0);
-            // Serial.println("---------------------------------------------------------");
             return;
 
-        case C_DUMP:
-            Serial.println("---------------------------------------------------------");
-            read_page(0);
-            Serial.println("---------------------------------------------------------");
+        case C_CLEAR:   // Erase memory to zero
+            write_all(0x00);
             return;
 
-        case C_ENTRY:
-            write_EEPROM(0x7FFC, 0x00);
-            write_EEPROM(0x7FFD, 0x80);
-            Serial.println("---------------------------------------------------------");
-            read_page(127);
-            Serial.println("---------------------------------------------------------");
-            return;
-
-        case C_CLEAR:
-            // write_all(0xEA);
-            // Serial.println("---------------------------------------------------------");
-            // read_page(0);
-            // Serial.println("---------------------------------------------------------");
-            return;
-
-        case C_PRINT:
+        case C_PRINT:   // Initialize the status that print on serial the content of the selected page
             state = S_PRINT_PAGE;
             ser_addres_count = 0;
             last_address = 0;
             return;
+
+        case C_HELP:    // Print command with description
+            Serial.println("---------------------------");
+            Serial.println("All commands accept only uppercase chars");
+            Serial.println("All characters that are not hex or command will be ignored");
+            Serial.println("---------------------------");
+            Serial.println("'H' Print this message");
+            Serial.println("'<' Start the writing. Ex: < AA AA AA ");
+            Serial.println("'>' End the writing. Ex: AA AA AA >");
+            Serial.println("'P' Print the selected memory page. Es: P0000 will print the page zero, P007F will print the page 127");
+            Serial.println("'R' Will overwrite all the memory with 0x00");
+            Serial.println("---------------------------");
 
         case '\n':
             return;
@@ -178,10 +155,6 @@ void loop() {
             if (read_HEX()) {
                 write_EEPROM(write_counter, last_byte);
                 ++write_counter;
-
-                //char buf[50];
-                //sprintf(buf, "Get:  0x%02X  %d", last_byte, last_byte);
-                //Serial.println(buf);
             }
 
             break;
@@ -385,8 +358,8 @@ static void write_page(const int page, const byte data) {
 
 static void write_all(const byte data) {
     for (int i = 0; i < 128; ++i) {
-        Serial.print("Writing page ");
-        Serial.println(i);
+        // Serial.print("Writing page ");
+        // Serial.println(i);
         write_page(i, data);
     }
 }
